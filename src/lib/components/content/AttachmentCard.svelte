@@ -17,7 +17,6 @@
 		['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(attachment.file_type.toLowerCase())
 	);
 	
-	// Check if image has been fetched from API
 	$effect(() => {
 		if (attachment.isMissingData && isImage) {
 			loadFetchedImage();

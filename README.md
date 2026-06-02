@@ -36,3 +36,17 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+## Image Fetch Limitations
+
+The image fetch flow calls Claude conversation APIs to resolve file/image references.
+
+- Claude plan limits apply to these API calls.
+- Free accounts can receive permission errors like: `Free users can only access their 5 most recently updated projects`.
+- When this happens, conversation image fetches for older projects will fail even if your cookie and org ID are correct.
+
+## Cookie Copying Tips
+
+- Copy the `cookie` request header from DevTools -> Network -> Request Headers.
+- Do not copy from the Application tab if values appear truncated.
+- If your cookie contains an ellipsis character (`…`), it is truncated and will be rejected.

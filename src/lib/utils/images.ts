@@ -36,6 +36,39 @@ interface ConversationResponse {
   chat_messages?: ConversationMessage[];
 }
 
+function normalizeCookieString(cookieString: string): { cookie?: string; error?: string } {
+  const trimmed = cookieString.trim();
+
+  if (!trimmed) {
+    return { error: 'Cookie string is required' };
+  }
+
+  if (trimmed.includes('\u2026') || trimmed.includes('...')) {
+    return {
+      error:
+        'Cookie string appears truncated (contains \"…\"). Copy the full cookie from DevTools -> Network -> Request Headers.'
+    };
+  }
+
+  if (/\r|\n/.test(trimmed)) {
+    return {
+      error:
+        'Cookie string must be a single line. Copy the full value from the request headers without line breaks.'
+    };
+  }
+
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed.charCodeAt(i) > 255) {
+      return {
+        error:
+          'Cookie string contains unsupported Unicode characters. Copy it again from DevTools -> Network -> Request Headers.'
+      };
+    }
+  }
+
+  return { cookie: trimmed };
+}
+
 async function fetchImageFromUrl(
   url: string,
   cookieString: string,
@@ -99,6 +132,11 @@ export async function fetchConversationImages(
   exportId: string,
   onProgress?: (progress: FetchConversationImagesProgress) => void
 ): Promise<FetchConversationImagesProgress> {
+  const cookieValidation = normalizeCookieString(cookieString);
+  if (!cookieValidation.cookie) {
+    throw new Error(cookieValidation.error || 'Invalid cookie string');
+  }
+
   const response = await fetch('/api/fetch-conversation', {
     method: 'POST',
     headers: {
@@ -107,7 +145,7 @@ export async function fetchConversationImages(
     body: JSON.stringify({
       conversationUuid,
       organizationId,
-      cookieString
+      cookieString: cookieValidation.cookie
     })
   });
   
@@ -153,7 +191,7 @@ export async function fetchConversationImages(
       
       const { data: base64Data, mimeType } = await fetchImageFromUrl(
         imageUrl,
-        cookieString
+        cookieValidation.cookie
       );
       
       // Find the file to get its name
@@ -204,6 +242,11 @@ export async function fetchAllImages(
   cookieString: string,
   onProgress?: (progress: FetchAllImagesProgress) => void
 ): Promise<FetchAllImagesProgress> {
+  const cookieValidation = normalizeCookieString(cookieString);
+  if (!cookieValidation.cookie) {
+    throw new Error(cookieValidation.error || 'Invalid cookie string');
+  }
+
   const conversations = await db.conversations
     .where('exportId')
     .equals(exportId)
@@ -230,7 +273,7 @@ export async function fetchAllImages(
       const convProgress = await fetchConversationImages(
         conv.uuid,
         organizationId,
-        cookieString,
+        cookieValidation.cookie,
         exportId,
         (cp) => {
           progress.totalFiles = progress.succeededFiles + progress.failedFiles + cp.totalFiles - cp.completed;

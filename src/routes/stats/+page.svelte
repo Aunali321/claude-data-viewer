@@ -9,40 +9,32 @@
 
 	let isLoading = $state(true);
 
-	// Overview stats
 	let totalExports = $state(0);
 	let totalConversations = $state(0);
 	let totalMessages = $state(0);
 	let totalProjects = $state(0);
 
-	// Message stats
 	let humanMessages = $state(0);
 	let assistantMessages = $state(0);
 
-	// Feature stats
 	let convsWithAttachments = $state(0);
 	let convsWithArtifacts = $state(0);
 	let convsWithCode = $state(0);
 	let convsWithThinking = $state(0);
 
-	// Timeline data
 	let messagesByMonth = $state<{ month: string; count: number }[]>([]);
 
-	// Top conversations
 	let topConversations = $state<{ name: string; messageCount: number; uuid: string }[]>([]);
 
-	// Average stats
 	let avgMessagesPerConv = $state(0);
 
-	// Chart instances
 	let timelineChart: Chart | null = null;
 	let senderChart: Chart | null = null;
 	let featuresChart: Chart | null = null;
 
-	// Chart canvas refs
-	let timelineCanvas: HTMLCanvasElement;
-	let senderCanvas: HTMLCanvasElement;
-	let featuresCanvas: HTMLCanvasElement;
+	let timelineCanvas = $state<HTMLCanvasElement>();
+	let senderCanvas = $state<HTMLCanvasElement>();
+	let featuresCanvas = $state<HTMLCanvasElement>();
 
 	async function loadStats() {
 		isLoading = true;
@@ -50,12 +42,10 @@
 		try {
 			const exportId = $currentExportId;
 
-			// Load exports
 			const allExports = await db.exports.toArray();
 			totalExports = allExports.length;
 			totalProjects = allExports.reduce((sum, e) => sum + e.projects.length, 0);
 
-			// Load conversations
 			let conversations: StoredConversation[];
 			if (exportId) {
 				conversations = await db.conversations.where('exportId').equals(exportId).toArray();
@@ -64,7 +54,6 @@
 			}
 			totalConversations = conversations.length;
 
-			// Load messages
 			let messages: StoredMessage[];
 			if (exportId) {
 				messages = await db.messages.where('exportId').equals(exportId).toArray();
@@ -73,26 +62,21 @@
 			}
 			totalMessages = messages.length;
 
-			// Sender breakdown
 			humanMessages = messages.filter(m => m.sender === 'human').length;
 			assistantMessages = messages.filter(m => m.sender === 'assistant').length;
 
-			// Feature stats
 			convsWithAttachments = conversations.filter(c => c.hasAttachments).length;
 			convsWithArtifacts = conversations.filter(c => c.hasArtifacts).length;
 			convsWithCode = conversations.filter(c => c.hasCode).length;
 			convsWithThinking = conversations.filter(c => c.hasThinking).length;
 
-			// Average messages per conversation
 			avgMessagesPerConv = totalConversations > 0 ? Math.round(totalMessages / totalConversations) : 0;
 
-			// Top conversations by message count
 			topConversations = [...conversations]
 				.sort((a, b) => b.messageCount - a.messageCount)
 				.slice(0, 10)
 				.map(c => ({ name: c.name || 'Untitled', messageCount: c.messageCount, uuid: c.uuid }));
 
-			// Messages by month
 			const monthCounts = new Map<string, number>();
 			for (const msg of messages) {
 				const date = new Date(msg.createdAt);
@@ -118,7 +102,6 @@
 	}
 
 	function createCharts() {
-		// Destroy existing charts
 		timelineChart?.destroy();
 		senderChart?.destroy();
 		featuresChart?.destroy();
@@ -136,7 +119,6 @@
 			info: 'rgb(59, 130, 246)',
 		};
 
-		// Timeline chart
 		if (messagesByMonth.length > 0) {
 			timelineChart = new Chart(timelineCanvas, {
 				type: 'bar',
@@ -177,7 +159,6 @@
 			});
 		}
 
-		// Sender distribution chart
 		if (humanMessages > 0 || assistantMessages > 0) {
 			senderChart = new Chart(senderCanvas, {
 				type: 'doughnut',
@@ -209,7 +190,6 @@
 			});
 		}
 
-		// Features chart
 		const featureData = [
 			{ label: 'Attachments', value: convsWithAttachments },
 			{ label: 'Artifacts', value: convsWithArtifacts },

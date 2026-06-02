@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { exports, currentExportId, filters, sidebarCollapsed, resetFilters, removeExport } from '$lib/stores/app';
+	import { exports, currentExportId, filters, sidebarCollapsed, resetFilters, removeExport, initializeStores } from '$lib/stores/app';
 	import { deleteExport } from '$lib/db';
+	import { saveBackup, restoreBackup, inspectBackup } from '$lib/db/backup';
 	import type { FilterState } from '$lib/types';
 	import type { ExportRecord } from '$lib/types';
 
@@ -9,6 +10,13 @@
 	let currentFilters = $derived($filters);
 	let allExports = $derived($exports);
 	let selectedExportId = $derived($currentExportId);
+
+	// Backup / restore state
+	let fileInput = $state<HTMLInputElement | null>(null);
+	let isBackingUp = $state(false);
+	let isRestoring = $state(false);
+	let restoreCandidate = $state<{ file: File; rowCount: number } | null>(null);
+	let backupError = $state<string | null>(null);
 
 	function toggleSidebar() {
 		sidebarCollapsed.update(v => !v);
@@ -53,7 +61,71 @@
 	function cancelDelete() {
 		exportToDelete = null;
 	}
+
+	async function handleDownloadBackup() {
+		if (isBackingUp) return;
+		isBackingUp = true;
+		backupError = null;
+		try {
+			await saveBackup();
+		} catch (e) {
+			backupError = e instanceof Error ? e.message : 'Backup failed.';
+		} finally {
+			isBackingUp = false;
+		}
+	}
+
+	function openRestorePicker() {
+		backupError = null;
+		fileInput?.click();
+	}
+
+	async function handleFileSelected(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = ''; // allow re-picking the same file later
+		if (!file) return;
+		try {
+			const { matches, databaseName, rowCount } = await inspectBackup(file);
+			if (!matches) {
+				backupError = `That file is a backup of "${databaseName}", not this app.`;
+				return;
+			}
+			restoreCandidate = { file, rowCount };
+		} catch {
+			backupError = "That doesn't look like a valid backup file.";
+		}
+	}
+
+	async function confirmRestore() {
+		if (!restoreCandidate) return;
+		const { file } = restoreCandidate;
+		restoreCandidate = null;
+		isRestoring = true;
+		backupError = null;
+		try {
+			await restoreBackup(file);
+			await initializeStores();
+			resetFilters();
+		} catch (e) {
+			backupError = e instanceof Error ? e.message : 'Restore failed.';
+		} finally {
+			isRestoring = false;
+		}
+	}
+
+	function cancelRestore() {
+		restoreCandidate = null;
+	}
+
+	function onKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape') return;
+		if (restoreCandidate) cancelRestore();
+		else if (exportToDelete) cancelDelete();
+	}
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <aside class="sidebar" class:collapsed={isCollapsed}>
 	<button class="toggle-btn" onclick={toggleSidebar} title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
@@ -215,6 +287,39 @@
 				</div>
 			</section>
 
+			<!-- Backup / Restore -->
+			<section class="sidebar-section data-section">
+				<h3 class="section-title">Data</h3>
+				<div class="filter-group">
+					<button class="data-btn" onclick={handleDownloadBackup} disabled={isBackingUp || isRestoring}>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"/>
+							<polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"/>
+							<line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+						{isBackingUp ? 'Preparing…' : 'Download backup'}
+					</button>
+					<button class="data-btn" onclick={openRestorePicker} disabled={isBackingUp || isRestoring}>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"/>
+							<polyline points="17 8 12 3 7 8" stroke-linecap="round" stroke-linejoin="round"/>
+							<line x1="12" y1="3" x2="12" y2="15" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+						{isRestoring ? 'Restoring…' : 'Restore backup'}
+					</button>
+				</div>
+				{#if backupError}
+					<p class="data-error">{backupError}</p>
+				{/if}
+				<input
+					type="file"
+					accept=".json,application/json"
+					bind:this={fileInput}
+					onchange={handleFileSelected}
+					hidden
+				/>
+			</section>
+
 			<!-- Reset -->
 			<button class="reset-btn" onclick={resetFilters}>
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -228,8 +333,9 @@
 </aside>
 
 {#if exportToDelete}
-	<div class="modal-backdrop" onclick={cancelDelete}>
-		<div class="modal" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-backdrop">
+		<button class="modal-scrim" aria-label="Cancel" onclick={cancelDelete}></button>
+		<div class="modal" role="dialog" aria-modal="true">
 			<div class="modal-icon">
 				<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<polyline points="3 6 5 6 21 6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -261,6 +367,31 @@
 					</svg>
 					Remove
 				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+{#if restoreCandidate}
+	<div class="modal-backdrop">
+		<button class="modal-scrim" aria-label="Cancel" onclick={cancelRestore}></button>
+		<div class="modal" role="dialog" aria-modal="true">
+			<div class="modal-icon warn">
+				<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"/>
+					<polyline points="17 8 12 3 7 8" stroke-linecap="round" stroke-linejoin="round"/>
+					<line x1="12" y1="3" x2="12" y2="15" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</div>
+			<h3 class="modal-title">Restore from backup?</h3>
+			<p class="modal-text">
+				This will <strong>replace all current data</strong> with the backup
+				({restoreCandidate.rowCount.toLocaleString()} records). Any exports, edits,
+				and fetched images not in the backup will be lost.
+			</p>
+			<div class="modal-actions">
+				<button class="modal-btn secondary" onclick={cancelRestore}>Cancel</button>
+				<button class="modal-btn warn" onclick={confirmRestore}>Restore</button>
 			</div>
 		</div>
 	</div>
@@ -595,12 +726,51 @@
 		color: white;
 	}
 
+	.data-section {
+		margin-top: auto;
+		padding-top: var(--cdv-space-4);
+		border-top: 1px solid var(--cdv-color-border-subtle);
+	}
+
+	.data-btn {
+		display: flex;
+		align-items: center;
+		gap: var(--cdv-space-2);
+		padding: var(--cdv-space-2) var(--cdv-space-3);
+		font-size: var(--cdv-font-size-sm);
+		color: var(--cdv-color-text-secondary);
+		background-color: transparent;
+		border: 1px solid transparent;
+		border-radius: var(--cdv-radius-lg);
+		cursor: pointer;
+		width: 100%;
+		text-align: left;
+		transition: all var(--cdv-transition-fast) var(--cdv-ease-default);
+	}
+
+	.data-btn:hover:not(:disabled) {
+		background-color: var(--cdv-color-bg-hover);
+		color: var(--cdv-color-text-primary);
+	}
+
+	.data-btn:disabled {
+		opacity: 0.6;
+		cursor: progress;
+	}
+
+	.data-error {
+		margin: var(--cdv-space-2) 0 0;
+		padding: 0 var(--cdv-space-2);
+		font-size: var(--cdv-font-size-xs);
+		color: var(--cdv-color-error-500);
+		line-height: var(--cdv-line-height-relaxed);
+	}
+
 	.reset-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		gap: var(--cdv-space-2);
-		margin-top: auto;
 		padding: var(--cdv-space-2-5) var(--cdv-space-4);
 		font-size: var(--cdv-font-size-sm);
 		font-weight: var(--cdv-font-weight-medium);
@@ -631,7 +801,19 @@
 		animation: fadeIn var(--cdv-transition-fast) var(--cdv-ease-out);
 	}
 
+	.modal-scrim {
+		position: absolute;
+		inset: 0;
+		margin: 0;
+		padding: 0;
+		border: none;
+		background: transparent;
+		cursor: default;
+	}
+
 	.modal {
+		position: relative;
+		z-index: 1;
 		background-color: var(--cdv-color-surface-primary);
 		border: 1px solid var(--cdv-color-border-subtle);
 		border-radius: var(--cdv-radius-2xl);
@@ -653,6 +835,16 @@
 		background-color: var(--cdv-color-error-50);
 		border-radius: var(--cdv-radius-full);
 		color: var(--cdv-color-error-500);
+	}
+
+	.modal-icon.warn {
+		background-color: var(--cdv-color-brand-100);
+		color: var(--cdv-color-brand-600);
+	}
+
+	:global(.dark) .modal-icon.warn {
+		background-color: var(--cdv-color-brand-900);
+		color: var(--cdv-color-brand-300);
 	}
 
 	.modal-title {
@@ -742,6 +934,17 @@
 	.modal-btn.danger:hover {
 		background-color: var(--cdv-color-error-600);
 		border-color: var(--cdv-color-error-600);
+	}
+
+	.modal-btn.warn {
+		background-color: var(--cdv-color-brand-500);
+		border: 1px solid var(--cdv-color-brand-500);
+		color: white;
+	}
+
+	.modal-btn.warn:hover {
+		background-color: var(--cdv-color-brand-600);
+		border-color: var(--cdv-color-brand-600);
 	}
 
 	@media (max-width: 768px) {

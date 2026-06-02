@@ -22,7 +22,6 @@
 	let editRecord = $state<EditRecord | null>(null);
 	let showActions = $state(false);
 	
-	// Get artifact versions for a specific artifact ID
 	function getArtifactVersions(block: ToolUseContent): ArtifactInput[] {
 		if (!artifactVersionsMap || block.name !== 'artifacts') return [];
 		const input = block.input as unknown as ArtifactInput;
@@ -30,7 +29,6 @@
 		return artifactVersionsMap.get(input.id) || [];
 	}
 	
-	// Check if message has edits
 	async function checkForEdits() {
 		const existing = await getEditForMessage(message.uuid);
 		editRecord = existing ?? null;
@@ -53,7 +51,6 @@
 		onToggleSelect(e.shiftKey);
 	}
 	
-	// Check for edits on mount
 	$effect(() => {
 		checkForEdits();
 	});
@@ -61,7 +58,6 @@
 	let isHuman = $derived(message.sender === 'human');
 	let isAssistant = $derived(message.sender === 'assistant');
 	
-	// Check if message has any flags
 	let hasFlags = $derived(message.content.some(b => b.flags !== null && b.flags !== undefined));
 </script>
 

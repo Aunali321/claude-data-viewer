@@ -23,6 +23,10 @@
     let progress = $state<FetchAllImagesProgress | null>(null);
     let error = $state("");
 
+    const totalFailures = $derived(
+        (progress?.failedFiles || 0) + (progress?.conversationErrors.length || 0),
+    );
+
     $effect(() => {
         loadConversationCount();
     });
@@ -110,9 +114,9 @@
                 <div class="complete-section">
                     <div
                         class="complete-icon"
-                        class:has-errors={progress && progress.failedFiles > 0}
+                        class:has-errors={totalFailures > 0}
                     >
-                        {#if progress && progress.failedFiles === 0}
+                        {#if totalFailures === 0}
                             <svg
                                 width="48"
                                 height="48"
@@ -157,7 +161,7 @@
                     </div>
                     <h3>Fetch Complete</h3>
                     <p class="stats">
-                        {progress?.succeededFiles || 0} succeeded, {progress?.failedFiles || 0} failed
+                        {progress?.succeededFiles || 0} succeeded, {totalFailures} failed
                     </p>
                     {#if progress && (progress.fileErrors.length > 0 || progress.conversationErrors.length > 0)}
                         <div class="errors-list">
@@ -195,6 +199,11 @@
                             Files: {progress.succeededFiles + progress.failedFiles} / {progress.totalFiles}
                             ({progress.succeededFiles} succeeded, {progress.failedFiles} failed)
                         </p>
+                        {#if progress.conversationErrors.length > 0}
+                            <p class="progress-text">
+                                Conversation access errors: {progress.conversationErrors.length}
+                            </p>
+                        {/if}
                     {/if}
                 </div>
             {:else}

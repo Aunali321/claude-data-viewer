@@ -23,17 +23,6 @@ export const selectedCount = derived(
   $map => $map.size
 );
 
-export const selectedConversationIds = derived(
-  selectedMessagesMap,
-  $map => {
-    const ids = new Set<string>();
-    for (const item of $map.values()) {
-      ids.add(item.conversationId);
-    }
-    return ids;
-  }
-);
-
 export const selectedByConversation = derived(
   selectedMessagesMap,
   $map => {
@@ -121,18 +110,6 @@ export function selectRange(
     for (let i = start; i <= end; i++) {
       const message = messages[i];
       newMap.set(message.uuid, { message, conversationId, conversationName });
-    }
-    return newMap;
-  });
-}
-
-export function deselectConversation(conversationId: string): void {
-  selectedMessagesMap.update(map => {
-    const newMap = new Map(map);
-    for (const [id, item] of newMap) {
-      if (item.conversationId === conversationId) {
-        newMap.delete(id);
-      }
     }
     return newMap;
   });

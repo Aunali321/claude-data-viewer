@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ToolUseContent, ArtifactInput } from '$lib/types';
+	import { escapeHtml } from '$lib/utils/format';
 	import { marked } from 'marked';
 	import hljs from 'highlight.js';
 	
@@ -19,7 +20,6 @@
 	let isWebSearch = $derived(content.name === 'web_search');
 	let originalArtifactInput = $derived(isArtifact ? content.input as unknown as ArtifactInput : null);
 	
-	// Track current version index in the versions array
 	let currentVersionIndex = $derived(() => {
 		if (!originalArtifactInput || allArtifactVersions.length === 0) return -1;
 		return allArtifactVersions.findIndex(v => v.version_uuid === originalArtifactInput?.version_uuid);
@@ -40,7 +40,6 @@
 		return idx >= 0 ? idx + 1 : null;
 	});
 	
-	// Check if there are multiple versions
 	let hasMultipleVersions = $derived(allArtifactVersions.length > 1);
 	
 	function selectVersion(index: number) {
@@ -48,7 +47,6 @@
 		showVersionDropdown = false;
 	}
 	
-	// Get artifact type label
 	function getArtifactTypeLabel(type: string): string {
 		if (type.includes('code') || type.startsWith('application/vnd.ant.code')) {
 			return 'Code';
@@ -68,7 +66,6 @@
 		return type.split('/').pop() || 'File';
 	}
 	
-	// Get language from artifact type
 	function getLanguage(type: string): string {
 		const parts = type.split('/');
 		const last = parts[parts.length - 1];
@@ -92,7 +89,6 @@
 			return marked.parse(input.content) as string;
 		}
 		
-		// For code, use highlight.js
 		const lang = getLanguage(input.type);
 		try {
 			if (hljs.getLanguage(lang)) {
@@ -101,15 +97,6 @@
 		} catch {}
 		
 		return `<pre><code>${escapeHtml(input.content)}</code></pre>`;
-	}
-	
-	function escapeHtml(text: string): string {
-		return text
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;')
-			.replace(/'/g, '&#039;');
 	}
 	
 	function getCodePreview(content: string): string {

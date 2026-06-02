@@ -26,6 +26,7 @@
 	"dependencies": {
 		"chart.js": "^4.5.1",
 		"dexie": "^4.2.1",
+		"dexie-export-import": "^4.4.0",
 		"highlight.js": "^11.11.1",
 		"jszip": "^3.10.1",
 		"marked": "^17.0.1"

@@ -95,7 +95,6 @@ export async function importZipFile(
   const exportName = file.name.replace(/\.zip$/i, '').replace(/^claude_data_export_/, '');
   
   try {
-    // Stage 1: Read zip file
     onProgress?.({
       stage: 'reading',
       message: 'Reading zip file...',
@@ -104,14 +103,12 @@ export async function importZipFile(
     
     const zip = await JSZip.loadAsync(file);
     
-    // Stage 2: Parse JSON files
     onProgress?.({
       stage: 'parsing',
       message: 'Parsing export data...',
       progress: 15
     });
     
-    // Read required files
     const usersFile = zip.file('users.json');
     const projectsFile = zip.file('projects.json');
     const conversationsFile = zip.file('conversations.json');
@@ -141,7 +138,6 @@ export async function importZipFile(
     const projects: Project[] = JSON.parse(projectsJson);
     const conversations: Conversation[] = JSON.parse(conversationsJson);
     
-    // Use first user as the export owner
     const user = users[0];
     if (!user) {
       throw new Error('No user found in export');
@@ -157,7 +153,6 @@ export async function importZipFile(
       }
     });
     
-    // Stage 3: Index data into database
     let totalMessages = 0;
     const storedConversations: StoredConversation[] = [];
     const storedMessages: StoredMessage[] = [];
@@ -165,11 +160,9 @@ export async function importZipFile(
     for (let i = 0; i < conversations.length; i++) {
       const conv = conversations[i];
       
-      // Analyze conversation content
       const analysis = analyzeConversation(conv);
       
-      // Create stored conversation record
-      const hasFilesInExport = conv.chat_messages.some(msg => 
+      const hasFilesInExport = conv.chat_messages.some(msg =>
         (msg.files && msg.files.length > 0) || 
         (msg.files_v2 && msg.files_v2.length > 0)
       );
@@ -191,7 +184,6 @@ export async function importZipFile(
         hasFilesInExport
       });
       
-      // Create stored message records
       for (let j = 0; j < conv.chat_messages.length; j++) {
         const msg = conv.chat_messages[j];
         const mergedAttachments = mergeFilesIntoAttachments(msg.attachments, msg.files);
@@ -215,7 +207,6 @@ export async function importZipFile(
         totalMessages++;
       }
       
-      // Update progress every 10 conversations
       if (i % 10 === 0 || i === conversations.length - 1) {
         const progressPercent = 35 + Math.round((i / conversations.length) * 55);
         onProgress?.({
@@ -231,7 +222,6 @@ export async function importZipFile(
       }
     }
     
-    // Create export record
     const exportRecord: ExportRecord = {
       id: exportId,
       name: exportName,
@@ -243,7 +233,6 @@ export async function importZipFile(
       messageCount: totalMessages
     };
     
-    // Batch insert into database
     onProgress?.({
       stage: 'indexing',
       message: 'Saving to database...',
@@ -284,7 +273,6 @@ export async function importZipFile(
       progress: 0
     });
     
-    // Clean up any partial data
     try {
       await db.exports.delete(exportId);
       await db.conversations.where('exportId').equals(exportId).delete();
@@ -333,14 +321,12 @@ function analyzeConversation(conversation: Conversation): {
       }
       
       if (block.type === 'text') {
-        // Check for code blocks in text
         if (block.text.includes('```')) {
           hasCode = true;
         }
       }
     }
     
-    // Early exit if all flags found
     if (hasAttachments && hasArtifacts && hasCode && hasThinking) {
       break;
     }
@@ -388,24 +374,4 @@ function extractTextFromContent(content: ContentBlock[]): string {
   }
   
   return texts.join('\n');
-}
-
-/**
- * Import multiple zip files
- */
-export async function importMultipleZipFiles(
-  files: File[],
-  onProgress?: (fileIndex: number, fileName: string, progress: ImportProgress) => void
-): Promise<ImportResult[]> {
-  const results: ImportResult[] = [];
-  
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const result = await importZipFile(file, (progress) => {
-      onProgress?.(i, file.name, progress);
-    });
-    results.push(result);
-  }
-  
-  return results;
 }

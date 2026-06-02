@@ -19,7 +19,6 @@
 	let isEdited = $derived(editedText !== null && editedText !== content.text);
 	let hasCitations = $derived(content.citations && content.citations.length > 0);
 	
-	// Configure marked for GFM
 	marked.setOptions({
 		gfm: true,
 		breaks: true
@@ -56,7 +55,6 @@
 			}
 		});
 		
-		// Add citation hover listeners
 		if (hasCitations) {
 			const markers = containerRef.querySelectorAll('.citation-marker');
 			markers.forEach((marker) => {
@@ -81,7 +79,6 @@
 	}
 	
 	function getCitationText(citation: Citation): string {
-		// Extract useful info from citation object
 		if (typeof citation === 'object' && citation !== null) {
 			const c = citation as Record<string, unknown>;
 			if (c.title) return String(c.title);

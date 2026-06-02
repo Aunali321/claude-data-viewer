@@ -13,7 +13,7 @@ import type {
 } from '$lib/types';
 import { db } from '$lib/db';
 
-export type ExportFormat = 'openai' | 'anthropic' | 'full' | 'custom';
+export type ExportFormat = 'openai' | 'anthropic' | 'markdown' | 'custom';
 export type MultiTurnMode = 'single' | 'multiple' | 'system-turns' | 'split';
 
 export interface ExportConfig {
@@ -26,17 +26,6 @@ export interface ExportConfig {
     toolCalls: boolean;
   };
 }
-
-export const defaultExportConfig: ExportConfig = {
-  format: 'openai',
-  multiTurnMode: 'single',
-  includeFields: {
-    uuid: false,
-    timestamps: false,
-    thinking: false,
-    toolCalls: false
-  }
-};
 
 interface OpenAIMessage {
   role: 'user' | 'assistant' | 'system';
@@ -59,16 +48,6 @@ type AnthropicToolResultContent =
 interface AnthropicMessage {
   role: 'user' | 'assistant';
   content: AnthropicContentBlock[];
-}
-
-interface FullMessage {
-  uuid: string;
-  role: 'user' | 'assistant';
-  content: string;
-  created_at: string;
-  conversation_uuid: string;
-  thinking?: string;
-  tool_calls?: Array<{ name: string; input: unknown }>;
 }
 
 interface CustomMessage {
@@ -352,21 +331,20 @@ async function formatOpenAI(messages: StoredMessage[]): Promise<OpenAIMessage[]>
   return result;
 }
 
-async function formatFull(messages: StoredMessage[]): Promise<FullMessage[]> {
-  const result: FullMessage[] = [];
+async function formatMarkdownMessages(messages: StoredMessage[]): Promise<string> {
+  const sections: string[] = [];
+
   for (const msg of messages) {
     const text = await getEditedText(msg.uuid, extractText(msg.content));
-    result.push({
-      uuid: msg.uuid,
-      role: mapRole(msg.sender),
-      content: text,
-      created_at: msg.createdAt,
-      conversation_uuid: msg.conversationUuid,
-      thinking: extractThinking(msg.content),
-      tool_calls: extractToolCalls(msg.content)
-    });
+    const role = mapRole(msg.sender) === 'user' ? 'User' : 'Assistant';
+    sections.push(`### ${role}\n\n${text || '(empty)'}`);
   }
-  return result;
+
+  if (sections.length === 0) {
+    return '(no messages)';
+  }
+
+  return sections.join('\n\n---\n\n');
 }
 
 async function formatCustom(
@@ -404,6 +382,19 @@ async function applyMultiTurnMode(
     }
 
     case 'multiple': {
+      if (config.format === 'markdown') {
+        const snippets: string[] = [];
+        let index = 1;
+
+        for (const [conversationUuid, msgs] of messagesByConversation) {
+          const formatted = await formatMarkdownMessages(msgs);
+          snippets.push(`## Conversation ${index}\n\nConversation UUID: ${conversationUuid}\n\n${formatted}`);
+          index++;
+        }
+
+        return snippets.join('\n\n\n');
+      }
+
       const snippets: unknown[] = [];
       for (const msgs of messagesByConversation.values()) {
         snippets.push(await formatMessages(msgs, config));
@@ -412,6 +403,16 @@ async function applyMultiTurnMode(
     }
 
     case 'system-turns': {
+      if (config.format === 'markdown') {
+        if (allMessages.length === 0) return '## System\n\n\n## Messages\n\n(no messages)';
+
+        const [first, ...rest] = allMessages;
+        const systemText = await getEditedText(first.uuid, extractText(first.content));
+        const formattedMessages = await formatMarkdownMessages(rest);
+
+        return `## System\n\n${systemText || '(empty)'}\n\n## Messages\n\n${formattedMessages}`;
+      }
+
       if (allMessages.length === 0) return { system: '', messages: [] };
       
       const [first, ...rest] = allMessages;
@@ -425,6 +426,28 @@ async function applyMultiTurnMode(
     }
 
     case 'split': {
+      if (config.format === 'markdown') {
+        const examples: string[] = [];
+        let exampleCount = 1;
+
+        for (let i = 0; i < allMessages.length - 1; i += 2) {
+          const human = allMessages[i];
+          const assistant = allMessages[i + 1];
+
+          if (human?.sender === 'human' && assistant?.sender === 'assistant') {
+            const input = await getEditedText(human.uuid, extractText(human.content));
+            const output = await getEditedText(assistant.uuid, extractText(assistant.content));
+
+            examples.push(
+              `### Example ${exampleCount}\n\n**Input**\n\n${input || '(empty)'}\n\n**Output**\n\n${output || '(empty)'}`
+            );
+            exampleCount++;
+          }
+        }
+
+        return examples.length > 0 ? examples.join('\n\n---\n\n') : '(no split pairs found)';
+      }
+
       const examples: SplitExample[] = [];
       for (let i = 0; i < allMessages.length - 1; i += 2) {
         const human = allMessages[i];
@@ -452,8 +475,8 @@ async function formatMessages(
       return formatOpenAI(messages);
     case 'anthropic':
       return formatAnthropic(messages);
-    case 'full':
-      return formatFull(messages);
+    case 'markdown':
+      return formatMarkdownMessages(messages);
     case 'custom':
       return formatCustom(messages, config.includeFields);
     default:
@@ -490,14 +513,23 @@ export async function generatePreview(
   }
 
   const data = await generateExport(limitedMap, config);
+
+  if (config.format === 'markdown') {
+    return typeof data === 'string' ? data : String(data);
+  }
+
   return JSON.stringify(data, null, 2);
 }
 
-export function downloadAsJson(data: unknown, filename?: string): void {
+export function downloadExport(data: unknown, format: ExportFormat, filename?: string): void {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const name = filename || `claude-export-${timestamp}.json`;
-  
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const isMarkdown = format === 'markdown';
+  const extension = isMarkdown ? 'md' : 'json';
+  const content = isMarkdown ? String(data) : JSON.stringify(data, null, 2);
+  const mimeType = isMarkdown ? 'text/markdown' : 'application/json';
+  const name = filename || `claude-export-${timestamp}.${extension}`;
+
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   
   const a = document.createElement('a');

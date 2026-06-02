@@ -1,9 +1,4 @@
-// Claude Export Data Types
-// Based on analysis of actual Claude.ai data exports
-
-// ============================================
-// Source File Types (from Claude export)
-// ============================================
+// Claude Export Data Types — reverse-engineered from actual Claude.ai data exports.
 
 export interface User {
   uuid: string;
@@ -172,9 +167,7 @@ export interface ArtifactInput {
   version_uuid: string;
 }
 
-// ============================================
-// Internal Storage Types (Dexie/IndexedDB)
-// ============================================
+// Internal storage types (Dexie/IndexedDB)
 
 export interface ExportRecord {
   id: string;
@@ -253,15 +246,6 @@ export interface EditRecord {
   updatedAt: string;
 }
 
-// ============================================
-// UI State Types
-// ============================================
-
-export interface SelectionState {
-  selectedMessageIds: Set<string>;
-  lastSelectedId: string | null;
-}
-
 export interface FilterState {
   search: string;
   hasAttachments: boolean | null;
@@ -272,48 +256,4 @@ export interface FilterState {
   sortBy: 'date-desc' | 'date-asc' | 'messages' | 'name';
 }
 
-export interface ExportOptions {
-  format: 'openai' | 'anthropic' | 'full' | 'custom';
-  multiTurnMode: 'single' | 'multiple' | 'system-turns' | 'split';
-  includeFields: {
-    uuid: boolean;
-    timestamps: boolean;
-    thinking: boolean;
-    toolCalls: boolean;
-  };
-}
-
-// ============================================
-// Utility Types
-// ============================================
-
 export type Sender = 'human' | 'assistant';
-export type ContentType = ContentBlock['type'];
-
-export function isTextContent(block: ContentBlock): block is TextContent {
-  return block.type === 'text';
-}
-
-export function isThinkingContent(block: ContentBlock): block is ThinkingContent {
-  return block.type === 'thinking';
-}
-
-export function isToolUseContent(block: ContentBlock): block is ToolUseContent {
-  return block.type === 'tool_use';
-}
-
-export function isToolResultContent(block: ContentBlock): block is ToolResultContent {
-  return block.type === 'tool_result';
-}
-
-export function isTokenBudgetContent(block: ContentBlock): block is TokenBudgetContent {
-  return block.type === 'token_budget';
-}
-
-export function isArtifactToolUse(block: ContentBlock): block is ToolUseContent & { input: ArtifactInput } {
-  return isToolUseContent(block) && block.name === 'artifacts';
-}
-
-export function isWebSearchToolUse(block: ContentBlock): block is ToolUseContent {
-  return isToolUseContent(block) && block.name === 'web_search';
-}

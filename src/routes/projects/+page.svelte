@@ -4,6 +4,7 @@
 	import Header from '$lib/components/layout/Header.svelte';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import type { Project, ExportRecord } from '$lib/types';
+	import { formatRelativeDate } from '$lib/utils/format';
 	import { onMount } from 'svelte';
 
 	interface ProjectWithExport extends Project {
@@ -15,17 +16,14 @@
 	let isLoading = $state(true);
 	let searchQuery = $state('');
 
-	// Filtered and sorted projects
 	let filteredProjects = $derived.by(() => {
 		let result = [...allProjects];
 
-		// Filter by current export if selected
 		const exportId = $currentExportId;
 		if (exportId) {
 			result = result.filter(p => p.exportId === exportId);
 		}
 
-		// Apply search
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase();
 			result = result.filter(p =>
@@ -34,7 +32,6 @@
 			);
 		}
 
-		// Sort by updated date (newest first)
 		result.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
 		return result;
@@ -64,34 +61,16 @@
 		}
 	}
 
-	function formatRelativeDate(dateString: string): string {
-		const date = new Date(dateString);
-		const now = new Date();
-		const diffMs = now.getTime() - date.getTime();
-		const diffMins = Math.floor(diffMs / (1000 * 60));
-		const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-		const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-		if (diffMins < 1) return 'just now';
-		if (diffMins < 60) return `${diffMins}m ago`;
-		if (diffHours < 24) return `${diffHours}h ago`;
-		if (diffDays < 7) return `${diffDays}d ago`;
-
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-	}
-
 	onMount(() => {
 		loadProjects();
 	});
 
-	// Reload when export changes
 	$effect(() => {
 		if ($currentExportId !== undefined) {
 			// Just trigger re-filter, data is already loaded
 		}
 	});
 
-	// Reload when exports change
 	$effect(() => {
 		if ($exports) {
 			loadProjects();
@@ -407,6 +386,7 @@
 		margin: 0 0 var(--cdv-space-2) 0;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}

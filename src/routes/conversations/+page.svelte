@@ -7,28 +7,25 @@
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import ExportModal from '$lib/components/export/ExportModal.svelte';
 	import type { StoredConversation, FilterState, StoredMessage } from '$lib/types';
+	import { formatRelativeDate } from '$lib/utils/format';
 	import { onMount } from 'svelte';
 
 	let conversations = $state<StoredConversation[]>([]);
 	let isLoading = $state(true);
 	let searchQuery = $state('');
 
-	// Conversation selection state
 	let selectedConversations = $state<Set<string>>(new Set());
 	let showExportModal = $state(false);
 	let isLoadingExport = $state(false);
-	
-	// Filtered and sorted conversations
+
 	let filteredConversations = $derived.by(() => {
 		let result = [...conversations];
-		
-		// Apply search
+
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase();
 			result = result.filter(c => c.name.toLowerCase().includes(query));
 		}
-		
-		// Apply filters
+
 		const f = $filters;
 		
 		if (!f.showHidden) {
@@ -50,8 +47,7 @@
 		if (f.hasCode === true) {
 			result = result.filter(c => c.hasCode);
 		}
-		
-		// Apply sorting
+
 		switch (f.sortBy) {
 			case 'date-desc':
 				result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -80,7 +76,6 @@
 					.equals(exportId)
 					.toArray();
 			} else {
-				// Load all conversations from all exports
 				conversations = await db.conversations.toArray();
 			}
 		} catch (error) {
@@ -93,23 +88,7 @@
 	function openConversation(uuid: string) {
 		goto(`/conversations/${uuid}`);
 	}
-	
-	function formatRelativeDate(dateString: string): string {
-		const date = new Date(dateString);
-		const now = new Date();
-		const diffMs = now.getTime() - date.getTime();
-		const diffMins = Math.floor(diffMs / (1000 * 60));
-		const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-		const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-		
-		if (diffMins < 1) return 'just now';
-		if (diffMins < 60) return `${diffMins}m ago`;
-		if (diffHours < 24) return `${diffHours}h ago`;
-		if (diffDays < 7) return `${diffDays}d ago`;
-		
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-	}
-	
+
 	function handleKeyDown(e: KeyboardEvent, uuid: string) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
@@ -117,7 +96,6 @@
 		}
 	}
 
-	// Selection functions
 	function toggleConversationSelection(uuid: string, e: MouseEvent) {
 		e.stopPropagation();
 		selectedConversations = new Set(selectedConversations);
@@ -143,7 +121,6 @@
 		clearSelection();
 
 		try {
-			// Load all messages from selected conversations
 			for (const convId of selectedConversations) {
 				const conv = conversations.find(c => c.uuid === convId);
 				if (!conv) continue;
@@ -187,7 +164,6 @@
 		loadConversations();
 	});
 
-	// Reload when export changes
 	$effect(() => {
 		if ($currentExportId !== undefined) {
 			loadConversations();
@@ -325,6 +301,7 @@
 							</button>
 							<!-- svelte-ignore a11y_click_events_have_key_events -->
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 							<label class="conv-checkbox" onclick={(e) => e.stopPropagation()}>
 								<input
 									type="checkbox"

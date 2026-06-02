@@ -1,5 +1,43 @@
 import { json, type RequestHandler } from "@sveltejs/kit";
 
+function getResponseErrorMessage(status: number, body: unknown): string {
+  if (
+    status === 403 &&
+    typeof body === "object" &&
+    body !== null &&
+    "error" in body &&
+    typeof (body as { error?: unknown }).error === "object" &&
+    (body as { error: { message?: unknown } }).error !== null
+  ) {
+    const message = (body as { error: { message?: unknown } }).error.message;
+    if (
+      typeof message === "string" &&
+      message.includes("Free users can only access their 5 most recently updated projects")
+    ) {
+      return "Claude returned a permission error: free accounts can only access the 5 most recently updated projects when fetching conversation details.";
+    }
+  }
+
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "error" in body &&
+    typeof (body as { error?: unknown }).error === "object" &&
+    (body as { error: { message?: unknown } }).error !== null
+  ) {
+    const message = (body as { error: { message?: unknown } }).error.message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  if (typeof body === "string" && body.trim()) {
+    return body.slice(0, 200);
+  }
+
+  return `HTTP ${status}`;
+}
+
 export const POST: RequestHandler = async ({ request }) => {
   try {
     const { conversationUuid, organizationId, cookieString } =
@@ -26,9 +64,14 @@ export const POST: RequestHandler = async ({ request }) => {
     });
 
     if (!response.ok) {
-      const text = await response.text();
+      const contentType = response.headers.get("content-type") || "";
+      const responseBody = contentType.includes("application/json")
+        ? await response.json()
+        : await response.text();
+      const message = getResponseErrorMessage(response.status, responseBody);
+
       return json(
-        { error: `Failed to fetch conversation: HTTP ${response.status} - ${text.slice(0, 200)}` },
+        { error: `Failed to fetch conversation: ${message}` },
         { status: response.status },
       );
     }

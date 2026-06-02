@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { selectedMessages, selectedByConversation, selectedCount, clearSelection } from '$lib/stores/selection';
-	import { generateExport, generatePreview, downloadAsJson, defaultExportConfig } from '$lib/utils/export';
+	import { generateExport, generatePreview, downloadExport } from '$lib/utils/export';
 	import type { ExportFormat, MultiTurnMode, ExportConfig } from '$lib/utils/export';
+	import { escapeHtml } from '$lib/utils/format';
 	import hljs from 'highlight.js/lib/core';
 	import json from 'highlight.js/lib/languages/json';
 	
@@ -65,7 +66,7 @@
 		try {
 			const msgMap = getMessagesByConversation();
 			const data = await generateExport(msgMap, config);
-			downloadAsJson(data);
+			downloadExport(data, format);
 			clearSelection();
 			onClose();
 		} catch (e) {
@@ -79,8 +80,12 @@
 		try {
 			return hljs.highlight(code, { language: 'json' }).value;
 		} catch {
-			return code;
+			return escapeHtml(code);
 		}
+	}
+
+	function renderPreview(code: string): string {
+		return format === 'markdown' ? escapeHtml(code) : highlightJson(code);
 	}
 	
 	$effect(() => {
@@ -143,10 +148,10 @@
 							</div>
 						</label>
 						<label class="radio-option">
-							<input type="radio" name="format" value="full" bind:group={format} />
+							<input type="radio" name="format" value="markdown" bind:group={format} />
 							<div class="radio-content">
-								<span class="radio-label">Full Metadata</span>
-								<span class="radio-desc">UUIDs, timestamps, all fields</span>
+								<span class="radio-label">Markdown</span>
+								<span class="radio-desc">Readable conversation transcript</span>
 							</div>
 						</label>
 						<label class="radio-option">
@@ -221,7 +226,7 @@
 			<section class="preview-section">
 				<h3>Preview</h3>
 				<div class="preview-container">
-					<pre class="preview-code"><code>{@html highlightJson(previewJson)}</code></pre>
+					<pre class="preview-code"><code>{@html renderPreview(previewJson)}</code></pre>
 					{#if totalMessages > 4}
 						<div class="preview-more">... ({totalMessages - 4} more messages)</div>
 					{/if}
@@ -241,7 +246,7 @@
 						<polyline points="7,10 12,15 17,10" stroke-linecap="round" stroke-linejoin="round"/>
 						<line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round"/>
 					</svg>
-					Download JSON
+					Download {format === 'markdown' ? 'Markdown' : 'JSON'}
 				{/if}
 			</button>
 		</footer>
